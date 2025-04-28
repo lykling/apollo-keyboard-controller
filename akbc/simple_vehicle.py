@@ -1,20 +1,22 @@
 #!/usr/bin/env python
 """simple vechile
 """
+import curses
+import math
+import signal
+import threading
+import time
+import traceback
+
+import can
 import cantools
 import cantools.database
 import cantools.database.can.database
-import can
-import math
-import signal
-import time
-import threading
-import traceback
-import curses
-from akbc import screen
 from cyber.python.cyber_py3 import cyber
 from modules.common_msgs.localization_msgs import localization_pb2
 from scipy.spatial.transform import Rotation
+
+from akbc import screen
 
 exit_event = threading.Event()
 
@@ -439,23 +441,25 @@ class SimpleVehicle:
         dt = 0.001
         ticks = 0
         while self.running():
-            if ((self.state.motion_mode == 1 or self.state.motion_mode == 5)
-                    and (self.state.gear == 4 or self.state.gear == 2)):
-                self.on_update_ackermann(dt)
-
-            elif (self.state.motion_mode == 2
-                  and (self.state.gear == 4 or self.state.gear == 2)):
-                self.on_update_spot_turn(dt)
-
-            elif (self.state.motion_mode == 4
-                  and (self.state.gear == 4 or self.state.gear == 2)):
-                self.on_update_sideway(dt)
-
-            elif (self.state.motion_mode == 3
-                  and (self.state.gear == 4 or self.state.gear == 2)):
-                self.on_update_crabwalk(dt)
-
             ticks += 1
+
+            if self.state.auto_driving == 1:
+                if ((self.state.motion_mode == 1
+                     or self.state.motion_mode == 5)
+                        and (self.state.gear == 4 or self.state.gear == 2)):
+                    self.on_update_ackermann(dt)
+
+                elif (self.state.motion_mode == 2
+                      and (self.state.gear == 4 or self.state.gear == 2)):
+                    self.on_update_spot_turn(dt)
+
+                elif (self.state.motion_mode == 4
+                      and (self.state.gear == 4 or self.state.gear == 2)):
+                    self.on_update_sideway(dt)
+
+                elif (self.state.motion_mode == 3
+                      and (self.state.gear == 4 or self.state.gear == 2)):
+                    self.on_update_crabwalk(dt)
 
             self.scr.world_win.draw('State', [
                 f'x: {self.state.x:.6f}',

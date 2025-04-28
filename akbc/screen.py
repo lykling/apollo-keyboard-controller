@@ -42,6 +42,15 @@ class Screen:
             self.win.idlok(True)
             self.win.idcok(True)
 
+        def draw_raw(self, lines, padding_x=0, padding_y=0):
+            """draw_raw
+            """
+            self.win.erase()
+            for i, line in enumerate(lines):
+                self.win.addstr(i + padding_y, padding_x, line)
+            self.win.box()
+            self.win.noutrefresh()
+
         def draw(self, title, lines, title_style=curses.A_BOLD):
             """draw
             """

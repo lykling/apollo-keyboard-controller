@@ -15,18 +15,18 @@
 """controller
 """
 
-import can
-import cantools
 import curses
-import time
 import threading
-import logging
+import time
 from collections import deque
 
-from akbc import screen
+import can
+import cantools
 from cyber.python.cyber_py3 import cyber
-from modules.common_msgs.control_msgs import control_cmd_pb2
 from modules.common_msgs.chassis_msgs import chassis_pb2
+from modules.common_msgs.control_msgs import control_cmd_pb2
+
+from akbc import screen
 
 
 class KeyboardController:
@@ -69,8 +69,13 @@ class KeyboardController:
             'steering_angle_speed': 0.0,
             'longitudinal_acceleration': 0.0,
         }
+        # TODO(All): refactor canbus message updater to independent module
         self.canbus_messages = {}
         self.canbus_message_data = {}
+        self.canbus_counter = {}
+        self.canbus_last = {}
+        self.canbus_latency = {}
+
         self.logs = deque(maxlen=20)
         self.control_cmd_msg = control_cmd_pb2.ControlCommand()
 
@@ -94,12 +99,15 @@ class KeyboardController:
     def draw_vehicle(self):
         """draw vehicle
         """
-        self.scr.vehicle_win.draw('', [
+        self.scr.vehicle_win.draw_raw([
             r'   _____',
             u'  /_____\\',
             r'  |o   o|',
-            f'  -/   \\-'.ljust(10),
-        ])
+            r'  |     |',
+            r'  |     |',
+            r'  |o   o|',
+            u'  |-----|',
+        ], 2, 2)
 
     def draw_controls(self):
         """draw controls
@@ -121,9 +129,11 @@ class KeyboardController:
             f'gear_location: {self.chassis["gear_location"]}',
             f'driving_mode: {self.chassis["driving_mode"]}',
             f'steering_angle: {self.chassis["steering_angle"]} deg',
-            f'steering_angle_speed: {self.chassis["steering_angle_speed"]} deg/s',
+            (r'steering_angle_speed: '
+             f'{self.chassis["steering_angle_speed"]} deg/s'),
             f'speed_mps: {self.chassis["speed_mps"]} m/s',
-            f'longitudinal_acceleration: {self.chassis["longitudinal_acceleration"]} m/s^2',
+            (r'longitudinal_acceleration: '
+             f'{self.chassis["longitudinal_acceleration"]} m/s^2'),
             f'stickcontrol_event: {self.chassis["stickcontrol_event"]}',
             f'motion_mode: {self.chassis["motion_mode"]}',
         ], curses.A_BOLD | curses.color_pair(1))
@@ -138,9 +148,11 @@ class KeyboardController:
             spec = self.db.get_message_by_frame_id(message.arbitration_id)
             if not spec:
                 continue
-            content.append(
-                f'{hex(spec.frame_id)}: {spec.length} {message.data.hex()} {spec.name}'
-            )
+            content.append(f'{hex(spec.frame_id)}: '
+                           f'{spec.length} '
+                           f'{self.canbus_counter[spec.frame_id]:6} '
+                           f'{self.canbus_latency[spec.frame_id]:8.3f} '
+                           f'{message.data.hex()} {spec.name}')
             content.append(f'    {self.canbus_message_data[spec.frame_id]}')
         self.scr.canbus_win.draw('Canbus:', content,
                                  curses.A_BOLD | curses.color_pair(1))
@@ -250,6 +262,16 @@ class KeyboardController:
             available_messages = list(
                 map(lambda x: x.frame_id, self.db.messages))
             if message.arbitration_id in available_messages:
+                if message.arbitration_id not in self.canbus_counter:
+                    self.canbus_counter[message.arbitration_id] = 0
+                self.canbus_counter[message.arbitration_id] += 1
+                if message.arbitration_id not in self.canbus_last:
+                    self.canbus_last[message.arbitration_id] = 0
+                last = self.canbus_last[message.arbitration_id]
+                now = time.time()
+                self.canbus_last[message.arbitration_id] = now
+                latency = (now - last) * 1000
+                self.canbus_latency[message.arbitration_id] = latency
                 spec = self.db.get_message_by_frame_id(message.arbitration_id)
                 data = spec.decode(message.data)
                 self.canbus_messages[message.arbitration_id] = message
