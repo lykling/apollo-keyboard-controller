@@ -1,0 +1,5 @@
+cantools
+click
+python-can
+scipy
+setuptools
