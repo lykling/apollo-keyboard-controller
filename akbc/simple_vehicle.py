@@ -10,6 +10,8 @@ import signal
 import time
 import threading
 import traceback
+import curses
+from akbc import screen
 from cyber.python.cyber_py3 import cyber
 from modules.common_msgs.localization_msgs import localization_pb2
 from scipy.spatial.transform import Rotation
@@ -97,9 +99,10 @@ class SimpleVehicle:
             """
             self.db = database
 
-    def __init__(self, dbc_file, device, initial_x=0.0, initial_y=0.0):
+    def __init__(self, scr, dbc_file, device, initial_x=0.0, initial_y=0.0):
         """__init__
         """
+        self.scr = scr
         self.db = cantools.database.load_file(dbc_file)
         if not isinstance(self.db, cantools.database.can.database.Database):
             raise TypeError('dbc_file should be a can database file')
@@ -454,6 +457,15 @@ class SimpleVehicle:
 
             ticks += 1
 
+            self.scr.world_win.draw('State', [
+                f'x: {self.state.x:.6f}',
+                f'y: {self.state.y:.6f}',
+                f'yaw: {self.state.yaw:.6f}',
+                f'vx: {self.state.velocity_x:.6f}',
+                f'ax: {self.state.acceleration_x:.6f}',
+                f's: {self.state.s:.6f}',
+            ], curses.A_BOLD | curses.color_pair(1))
+
             time.sleep(dt)
 
     def on_pose(self):
@@ -527,7 +539,9 @@ def main():
     """main entry
     """
     cyber.init()
-    vehicle = SimpleVehicle('./qddd.dbc', 'can0')
+    stdscr = curses.initscr()
+    scr = screen.Screen(stdscr)
+    vehicle = SimpleVehicle(scr, './vehicle.dbc', 'can0')
 
     def signal_handler(sig, frame):
         """signal_handler
