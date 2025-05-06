@@ -12,6 +12,7 @@ import can
 import cantools
 import cantools.database
 import cantools.database.can.database
+import numpy as np
 from cyber.python.cyber_py3 import cyber
 from modules.common_msgs.localization_msgs import localization_pb2
 from scipy.spatial.transform import Rotation
@@ -464,13 +465,28 @@ class SimpleVehicle:
             self.scr.world_win.draw('State', [
                 f'x: {self.state.x:.6f}',
                 f'y: {self.state.y:.6f}',
-                f'yaw: {self.state.yaw:.6f}',
+                f'yaw: {self.state.yaw:.6f}'
+                f' {math.degrees(self.state.yaw):.6f}',
                 f'vx: {self.state.velocity_x:.6f}',
                 f'ax: {self.state.acceleration_x:.6f}',
                 f's: {self.state.s:.6f}',
             ], curses.A_BOLD | curses.color_pair(1))
 
             time.sleep(dt)
+
+    def mrf_to_vrf(self, orientation, mrf):
+        """mrf_to_vrf
+        """
+        # mrf: vehicle axis
+        # vrf: world axis
+        # orientation: quaternion
+        rotation = Rotation.from_quat(orientation)
+        vrf = np.mat(rotation.inv().as_matrix()) * np.mat(mrf).T
+        return [
+            vrf.getA1()[0],
+            vrf.getA1()[1],
+            vrf.getA1()[2],
+        ]
 
     def on_pose(self):
         """on_pose
@@ -493,19 +509,42 @@ class SimpleVehicle:
             pose_msg.pose.orientation.qz = orientation[2]
             pose_msg.pose.orientation.qw = orientation[3]
             pose_msg.pose.heading = self.state.yaw
-            pose_msg.pose.linear_velocity.x = self.state.velocity_x * math.cos(
-                self.state.yaw)
-            pose_msg.pose.linear_velocity.y = self.state.velocity_y * math.sin(
-                self.state.yaw)
-            pose_msg.pose.linear_velocity.z = self.state.velocity_z
-            acc_x = self.state.acceleration_x * math.cos(self.state.yaw)
-            acc_y = self.state.acceleration_x * math.sin(self.state.yaw)
-            pose_msg.pose.linear_acceleration.x = acc_x
-            pose_msg.pose.linear_acceleration.y = acc_y
-            pose_msg.pose.linear_acceleration.z = self.state.acceleration_z
-            pose_msg.pose.angular_velocity.x = self.state.angular_rate_pitch
-            pose_msg.pose.angular_velocity.y = self.state.angular_rate_roll
-            pose_msg.pose.angular_velocity.z = self.state.angular_rate_yaw
+            linear_velocity = [
+                self.state.velocity_x * math.cos(self.state.yaw),
+                self.state.velocity_x * math.sin(self.state.yaw),
+                self.state.velocity_z,
+            ]
+            pose_msg.pose.linear_velocity.x = linear_velocity[0]
+            pose_msg.pose.linear_velocity.y = linear_velocity[1]
+            pose_msg.pose.linear_velocity.z = linear_velocity[2]
+            linear_accel = [
+                self.state.acceleration_x * math.cos(self.state.yaw),
+                self.state.acceleration_x * math.sin(self.state.yaw),
+                self.state.acceleration_z,
+            ]
+            pose_msg.pose.linear_acceleration.x = linear_accel[0]
+            pose_msg.pose.linear_acceleration.y = linear_accel[1]
+            pose_msg.pose.linear_acceleration.z = linear_accel[2]
+            angular_velocity = [
+                self.state.angular_rate_pitch,
+                self.state.angular_rate_roll,
+                self.state.angular_rate_yaw,
+            ]
+            pose_msg.pose.angular_velocity.x = angular_velocity[0]
+            pose_msg.pose.angular_velocity.y = angular_velocity[1]
+            pose_msg.pose.angular_velocity.z = angular_velocity[2]
+
+            linear_accel_vrf = self.mrf_to_vrf(orientation, linear_accel)
+            pose_msg.pose.linear_acceleration_vrf.x = linear_accel_vrf[0]
+            pose_msg.pose.linear_acceleration_vrf.y = linear_accel_vrf[1]
+            pose_msg.pose.linear_acceleration_vrf.z = linear_accel_vrf[2]
+
+            angular_velocity_vrf = self.mrf_to_vrf(orientation,
+                                                   angular_velocity)
+            pose_msg.pose.angular_velocity_vrf.x = angular_velocity_vrf[0]
+            pose_msg.pose.angular_velocity_vrf.y = angular_velocity_vrf[1]
+            pose_msg.pose.angular_velocity_vrf.z = angular_velocity_vrf[2]
+
             self.pose_writer.write(pose_msg)
             time.sleep(0.01)
 
