@@ -69,12 +69,6 @@ class KeyboardController:
             'steering_angle_speed': 0.0,
             'longitudinal_acceleration': 0.0,
         }
-        # TODO(All): refactor canbus message updater to independent module
-        self.canbus_messages = {}
-        self.canbus_message_data = {}
-        self.canbus_counter = {}
-        self.canbus_last = {}
-        self.canbus_latency = {}
 
         self.logs = deque(maxlen=20)
         self.control_cmd_msg = control_cmd_pb2.ControlCommand()
@@ -138,25 +132,6 @@ class KeyboardController:
             f'motion_mode: {self.chassis["motion_mode"]}',
         ], curses.A_BOLD | curses.color_pair(1))
 
-    def draw_canbus(self):
-        """draw canbus messages
-        """
-        content = []
-        for message in self.canbus_messages.values():
-            if not message:
-                continue
-            spec = self.db.get_message_by_frame_id(message.arbitration_id)
-            if not spec:
-                continue
-            content.append(f'{hex(spec.frame_id)}: '
-                           f'{spec.length} '
-                           f'{self.canbus_counter[spec.frame_id]:6} '
-                           f'{self.canbus_latency[spec.frame_id]:8.3f} '
-                           f'{message.data.hex()} {spec.name}')
-            content.append(f'    {self.canbus_message_data[spec.frame_id]}')
-        self.scr.canbus_win.draw('Canbus:', content,
-                                 curses.A_BOLD | curses.color_pair(1))
-
     def draw_logs(self):
         """draw operation logs
         """
@@ -173,10 +148,7 @@ class KeyboardController:
         self.draw_vehicle()
         self.draw_controls()
         self.draw_status()
-        self.draw_canbus()
         self.draw_logs()
-
-        self.scr.refresh()
 
     def handle_input(self, key):
         """handle_input
@@ -252,31 +224,6 @@ class KeyboardController:
         self.chassis[
             'longitudinal_acceleration'] = chassis.longitudinal_acceleration
 
-    def on_canbus(self):
-        """on_canbus
-        """
-        while self.running():
-            message = self.canbus.recv(1)
-            if message is None:
-                continue
-            available_messages = list(
-                map(lambda x: x.frame_id, self.db.messages))
-            if message.arbitration_id in available_messages:
-                if message.arbitration_id not in self.canbus_counter:
-                    self.canbus_counter[message.arbitration_id] = 0
-                self.canbus_counter[message.arbitration_id] += 1
-                if message.arbitration_id not in self.canbus_last:
-                    self.canbus_last[message.arbitration_id] = 0
-                last = self.canbus_last[message.arbitration_id]
-                now = time.time()
-                self.canbus_last[message.arbitration_id] = now
-                latency = (now - last) * 1000
-                self.canbus_latency[message.arbitration_id] = latency
-                spec = self.db.get_message_by_frame_id(message.arbitration_id)
-                data = spec.decode(message.data)
-                self.canbus_messages[message.arbitration_id] = message
-                self.canbus_message_data[message.arbitration_id] = data
-
     def get_control_command(self):
         """get_control_command
         """
@@ -312,14 +259,10 @@ class KeyboardController:
     def run(self):
         self.log("System started")
 
-        canbus_thread = threading.Thread(target=self.on_canbus)
-        self.threads.append(canbus_thread)
-        canbus_thread.start()
         update_thread = threading.Thread(target=self.on_update)
         self.threads.append(update_thread)
         update_thread.start()
 
-        canbus_thread.join()
         update_thread.join()
 
     def shutdown(self):

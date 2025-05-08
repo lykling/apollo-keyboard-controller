@@ -43,13 +43,13 @@ class SimpleVehicle:
             """__init__
             """
             self.vin = '12345678901234567'
-            self.L = 3.0
+            self.L = 0.96
 
     class State:
         """State
         """
 
-        def __init__(self, initial_x=0.0, initial_y=0.0):
+        def __init__(self, initial_x=0.0, initial_y=0.0, initial_yaw=0.0):
             """__init__
             """
             self.auto_driving = 0
@@ -61,7 +61,7 @@ class SimpleVehicle:
             # attitude
             self.pitch = 0.0
             self.roll = 0.0
-            self.yaw = 0.0
+            self.yaw = initial_yaw
 
             # displacement
             self.s = 0.0
@@ -102,9 +102,22 @@ class SimpleVehicle:
             """
             self.db = database
 
-    def __init__(self, scr, dbc_file, device, initial_x=0.0, initial_y=0.0):
+    def __init__(self,
+                 scr,
+                 dbc_file,
+                 device,
+                 initial_x=0.0,
+                 initial_y=0.0,
+                 initial_yaw=0.0):
         """__init__
         """
+        self._init_args = {
+            'dbc_file': dbc_file,
+            'device': device,
+            'initial_x': initial_x,
+            'initial_y': initial_y,
+            'initial_yaw': initial_yaw,
+        }
         self.scr = scr
         self.db = cantools.database.load_file(dbc_file)
         if not isinstance(self.db, cantools.database.can.database.Database):
@@ -117,7 +130,7 @@ class SimpleVehicle:
         )
 
         self.attrs = self.Attrs()
-        self.state = self.State(initial_x, initial_y)
+        self.state = self.State(initial_x, initial_y, initial_yaw)
 
         self.control_messages = [
             self.db.get_message_by_name('ADAS_Heartbeat_Command'),
@@ -150,6 +163,7 @@ class SimpleVehicle:
         self.pose_writer = self.node.create_writer(
             '/apollo/localization/pose', localization_pb2.LocalizationEstimate)
 
+        self.paused = False
         self._stop_event = threading.Event()
 
     def bind_report_messages(self):
@@ -363,28 +377,31 @@ class SimpleVehicle:
             self.state.velocity_x = -v
         else:
             self.state.velocity_x = v
+        if v < 1e-3:
+            v = 0
+            return
 
         heading = self.state.yaw
         steering = self.state.steering
         wheelbase = self.attrs.L
 
-        n_heading = math.fmod(
-            heading + (math.tan(steering * math.pi / 180) / wheelbase) * dt,
-            2 * math.pi)
-        if self.state.motion_mode == 5:
-            n_heading = math.fmod(
-                heading + (math.tan(steering * math.pi / 180) /
-                           (wheelbase / 2)) * dt, 2 * math.pi)
+        tan_delta = math.tan(steering * math.pi / 180)
+        omega = 0.0
+        if math.fabs(tan_delta) > 1e-6:
+            omega = v / (wheelbase / tan_delta)
+            if self.state.motion_mode == 5:
+                omega = v / (wheelbase / 2 / tan_delta)
+            omega = clamp(omega, -327.68 * math.pi / 180,
+                          327.67 * math.pi / 180)
+        heading = math.fmod(heading + omega * dt, 2 * math.pi)
         dx = self.state.velocity_x * math.cos(heading) * dt
         dy = self.state.velocity_x * math.sin(heading) * dt
         ds = math.fabs(self.state.velocity_x) * dt
         self.state.x += dx
         self.state.y += dy
         self.state.s += ds
-        self.state.yaw = n_heading
-        self.state.angular_rate_yaw = clamp((n_heading - heading) / dt,
-                                            -327.68 * math.pi / 180,
-                                            327.67 * math.pi / 180)
+        self.state.yaw = heading
+        self.state.angular_rate_yaw = omega
 
     def on_update_spot_turn(self, dt):
         """on_update_spot_turn
@@ -444,7 +461,7 @@ class SimpleVehicle:
         while self.running():
             ticks += 1
 
-            if self.state.auto_driving == 1:
+            if self.state.auto_driving == 1 and not self.paused:
                 if ((self.state.motion_mode == 1
                      or self.state.motion_mode == 5)
                         and (self.state.gear == 4 or self.state.gear == 2)):
@@ -463,13 +480,17 @@ class SimpleVehicle:
                     self.on_update_crabwalk(dt)
 
             self.scr.world_win.draw('State', [
+                f'ticks: {ticks} paused: {self.paused}',
                 f'x: {self.state.x:.6f}',
                 f'y: {self.state.y:.6f}',
                 f'yaw: {self.state.yaw:.6f}'
                 f' {math.degrees(self.state.yaw):.6f}',
+                f'omega: {self.state.angular_rate_yaw:.6f}',
                 f'vx: {self.state.velocity_x:.6f}',
                 f'ax: {self.state.acceleration_x:.6f}',
                 f's: {self.state.s:.6f}',
+                f'steering: {self.state.steering}',
+                f'steering_rate: {self.state.steering_rate}',
             ], curses.A_BOLD | curses.color_pair(1))
 
             time.sleep(dt)
@@ -547,6 +568,31 @@ class SimpleVehicle:
 
             self.pose_writer.write(pose_msg)
             time.sleep(0.01)
+
+    def pause(self):
+        """pause
+        """
+        self.paused = True
+
+    def resume(self):
+        """resume
+        """
+        self.paused = False
+
+    def reset(self):
+        """reset
+        """
+        self.state.x = self._init_args['initial_x']
+        self.state.y = self._init_args['initial_y']
+        self.state.yaw = self._init_args['initial_yaw']
+        self.state.s = 0.0
+        self.state.velocity_x = 0.0
+        self.state.acceleration_x = 0.0
+        self.state.angular_rate_yaw = 0.0
+        self.state.steering = 0.0
+        self.state.steering_rate = 0.0
+        self.state.motion_mode = 1
+        self.state.gear = 0
 
     def running(self):
         """running

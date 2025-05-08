@@ -41,6 +41,8 @@ class Screen:
             self.win.scrollok(True)
             self.win.idlok(True)
             self.win.idcok(True)
+            self.win.box()
+            self.win.noutrefresh()
 
         def draw_raw(self, lines, padding_x=0, padding_y=0):
             """draw_raw
@@ -107,17 +109,37 @@ class Screen:
         self.log_win = self.Window(self.stdscr, *log_win_coords)
 
         self.listeners = {}
+        self.tick_callbacks = []
         self.running = False
 
     def refresh(self):
         """refresh
         """
-        curses.doupdate()
+        if self.running:
+            curses.doupdate()
 
     def on(self, key, callback):
         """on
         """
         self.listeners[key] = callback
+
+    def off(self, key):
+        """off
+        """
+        if key in self.listeners:
+            del self.listeners[key]
+
+    def ontick(self, callback):
+        """ontick
+        register callback invoked every tick
+        """
+        self.tick_callbacks.append(callback)
+
+    def offtick(self, callback):
+        """offtick
+        unregister callback invoked every tick
+        """
+        self.tick_callbacks.remove(callback)
 
     def run(self):
         """run
@@ -133,15 +155,25 @@ class Screen:
                 key = self.stdscr.getch()
                 if key in self.listeners:
                     self.listeners[key](key)
+
+                self.refresh()
             except curses.error:
                 # no input
                 pass
+            for cb in self.tick_callbacks:
+                try:
+                    cb()
+                except Exception:
+                    continue
+
             time.sleep(0.01)
 
     def shutdown(self):
         """shutdown
         """
         self.running = False
+        self.listeners.clear()
+        self.tick_callbacks.clear()
         self.stdscr.clear()
         self.stdscr.refresh()
         self.stdscr.keypad(False)
