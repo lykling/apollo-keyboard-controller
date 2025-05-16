@@ -388,9 +388,9 @@ class SimpleVehicle:
         tan_delta = math.tan(steering * math.pi / 180)
         omega = 0.0
         if math.fabs(tan_delta) > 1e-6:
-            omega = v / (wheelbase / tan_delta)
+            omega = v * tan_delta / wheelbase
             if self.state.motion_mode == 5:
-                omega = v / (wheelbase / 2 / tan_delta)
+                omega = omega * 2.0
             omega = clamp(omega, -327.68 * math.pi / 180,
                           327.67 * math.pi / 180)
         heading = math.fmod(heading + omega * dt, 2 * math.pi)
@@ -410,6 +410,13 @@ class SimpleVehicle:
         self.state.angular_rate_yaw = clamp(angular_delta / dt,
                                             -327.68 * math.pi / 180,
                                             327.67 * math.pi / 180)
+        self.state.velocity_x = self.state.angular_rate_yaw * self.attrs.L / 2
+        v = math.fabs(self.state.velocity_x)
+        if v < 1e-3:
+            v = 0
+            self.angular_rate_yaw = 0
+            return
+
         if self.state.gear == 4:
             self.state.yaw = math.fmod(self.state.yaw + angular_delta,
                                        2 * math.pi)
@@ -524,7 +531,7 @@ class SimpleVehicle:
             pose_msg.pose.position.y = self.state.y
             pose_msg.pose.position.z = self.state.z
             orientation = Rotation.from_euler(
-                'xyz', [0, 0, self.state.yaw]).as_quat()
+                'xyz', [0, 0, self.state.yaw - math.pi / 2]).as_quat()
             pose_msg.pose.orientation.qx = orientation[0]
             pose_msg.pose.orientation.qy = orientation[1]
             pose_msg.pose.orientation.qz = orientation[2]
