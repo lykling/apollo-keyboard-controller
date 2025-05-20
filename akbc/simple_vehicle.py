@@ -394,9 +394,9 @@ class SimpleVehicle:
             omega = clamp(omega, -327.68 * math.pi / 180,
                           327.67 * math.pi / 180)
         heading = math.fmod(heading + omega * dt, 2 * math.pi)
-        dx = self.state.velocity_x * math.cos(heading) * dt
-        dy = self.state.velocity_x * math.sin(heading) * dt
         ds = math.fabs(self.state.velocity_x) * dt
+        dx = ds * math.cos((self.state.yaw + heading) / 2)
+        dy = ds * math.sin((self.state.yaw + heading) / 2)
         self.state.x += dx
         self.state.y += dy
         self.state.s += ds
