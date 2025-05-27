@@ -39,17 +39,22 @@ class SimpleVehicle:
         """Attrs
         """
 
-        def __init__(self):
+        def __init__(self, vin='12345678901234567', wheelbase=0.96):
             """__init__
             """
-            self.vin = '12345678901234567'
-            self.L = 0.96
+            self.vin = vin
+            self.L = wheelbase
 
     class State:
         """State
         """
 
-        def __init__(self, initial_x=0.0, initial_y=0.0, initial_yaw=0.0):
+        def __init__(self,
+                     initial_x=0.0,
+                     initial_y=0.0,
+                     initial_yaw=0.0,
+                     wheelbase=0.96,
+                     vin='12345678901234567'):
             """__init__
             """
             self.auto_driving = 0
@@ -102,13 +107,17 @@ class SimpleVehicle:
             """
             self.db = database
 
-    def __init__(self,
-                 scr,
-                 dbc_file,
-                 device,
-                 initial_x=0.0,
-                 initial_y=0.0,
-                 initial_yaw=0.0):
+    def __init__(
+        self,
+        scr,
+        dbc_file,
+        device,
+        initial_x=0.0,
+        initial_y=0.0,
+        initial_yaw=0.0,
+        vin='12345678901234567',
+        wheelbase=0.96,
+    ):
         """__init__
         """
         self._init_args = {
@@ -117,6 +126,8 @@ class SimpleVehicle:
             'initial_x': initial_x,
             'initial_y': initial_y,
             'initial_yaw': initial_yaw,
+            'vin': vin,
+            'wheelbase': wheelbase,
         }
         self.scr = scr
         self.db = cantools.database.load_file(dbc_file)
@@ -129,7 +140,7 @@ class SimpleVehicle:
             bitrate=500000,
         )
 
-        self.attrs = self.Attrs()
+        self.attrs = self.Attrs(vin, wheelbase)
         self.state = self.State(initial_x, initial_y, initial_yaw)
 
         self.control_messages = [

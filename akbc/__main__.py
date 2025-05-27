@@ -35,6 +35,18 @@ from akbc import canbus_monitor, keyboard_controller, screen, simple_vehicle
     default=2.891656162,
     type=float,
     help='initial yaw')
+@click.option(
+    '--wheelbase',
+    default=0.96,
+    type=float,
+    help='vehicle wheelbase, default 0.96, unit: m',
+)
+@click.option(
+    '--vin',
+    default='12345678901234567',
+    type=str,
+    help='vehicle vin, default 12345678901234567',
+)
 def main(**kwargs):
     """main entry
     """
@@ -52,11 +64,10 @@ def main(**kwargs):
             scr, kwargs['dbc_file'], kwargs['device'])
     vehicle = None
     if kwargs['enable_virtual_vehicle']:
-        vehicle = simple_vehicle.SimpleVehicle(scr, kwargs['dbc_file'],
-                                               kwargs['device'],
-                                               kwargs['initial_x'],
-                                               kwargs['initial_y'],
-                                               kwargs['initial_yaw'])
+        vehicle = simple_vehicle.SimpleVehicle(
+            scr, kwargs['dbc_file'], kwargs['device'], kwargs['initial_x'],
+            kwargs['initial_y'], kwargs['initial_yaw'], kwargs['vin'],
+            kwargs['wheelbase'])
     monitor = canbus_monitor.CanbusMonitor(kwargs['dbc_file'],
                                            kwargs['device'])
 
