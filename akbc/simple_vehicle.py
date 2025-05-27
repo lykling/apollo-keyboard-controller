@@ -328,6 +328,8 @@ class SimpleVehicle:
         if self.state.motion_mode != 2:
             return
         self.state.steering_rate = clamp(steering_rate, -327.68, 327.67)
+        r = self.attrs.L / 2.0
+        self.state.velocity_x = self.state.steering_rate * math.pi / 180 * r
 
     def on_control(self):
         """on_control
@@ -417,12 +419,22 @@ class SimpleVehicle:
             self.angular_rate_yaw = 0
             return
 
+        direction = 1.0
         if self.state.gear == 4:
-            self.state.yaw = math.fmod(self.state.yaw + angular_delta,
-                                       2 * math.pi)
+            direction = 1.0
         else:
-            self.state.yaw = math.fmod(self.state.yaw - angular_delta,
-                                       2 * math.pi)
+            direction = -1.0
+        heading = math.fmod(self.state.yaw + direction * angular_delta,
+                            2 * math.pi)
+        r = self.attrs.L / 2
+        self.state.x = self.state.x + r * (math.cos(self.state.yaw) -
+                                           math.cos(heading))
+        self.state.y = self.state.y + r * (math.sin(self.state.yaw) -
+                                           math.sin(heading))
+        self.state.yaw = heading
+
+        ds = v * dt
+        self.state.s += ds
 
     def on_update_sideway(self, dt):
         """on_update_sideway
@@ -436,9 +448,9 @@ class SimpleVehicle:
         heading = self.state.yaw
         dx = self.state.velocity_x * math.cos(heading + math.pi / 2) * dt
         dy = self.state.velocity_x * math.sin(heading + math.pi / 2) * dt
-        ds = math.fabs(self.state.velocity_x) * dt
         self.state.x += dx
         self.state.y += dy
+        ds = math.fabs(self.state.velocity_x) * dt
         self.state.s += ds
 
     def on_update_crabwalk(self, dt):
