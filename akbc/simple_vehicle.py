@@ -25,6 +25,9 @@ exit_event = threading.Event()
 def clamp(value, min_value, max_value):
     """clamp
     """
+    if min_value > max_value:
+        min_value, max_value = max_value, min_value
+
     if value < min_value:
         return min_value
     elif value > max_value:
@@ -318,10 +321,17 @@ class SimpleVehicle:
     def on_control_acceleration(self, acceleration, deceleration):
         """on_control_acceleration
         """
-        if deceleration > 0:
-            self.state.acceleration_x = -deceleration
+        direction = 1.0
+        if self.state.gear == 4:
+            direction = 1.0
+        elif self.state.gear == 2:
+            direction = -1.0
         else:
-            self.state.acceleration_x = acceleration
+            return
+        if deceleration > 0:
+            self.state.acceleration_x = -deceleration * direction
+        else:
+            self.state.acceleration_x = acceleration * direction
 
         self.state.acceleration_x = clamp(self.state.acceleration_x, -10.23,
                                           10.24)
@@ -383,15 +393,14 @@ class SimpleVehicle:
     def on_update_ackermann(self, dt):
         """on_update_ackermann
         """
-        pass
-        v = math.fabs(self.state.velocity_x)
-        v = clamp(v + self.state.acceleration_x * dt, 0.0, 20.47)
+        direction = 1.0
         if self.state.gear == 2:
-            self.state.velocity_x = -v
-        else:
-            self.state.velocity_x = v
-        if v < 1e-3:
-            v = 0
+            direction = -1.0
+        v = self.state.velocity_x
+        v = clamp(v + self.state.acceleration_x * dt, 0, 10.23 * direction)
+        self.state.velocity_x = v
+        if math.fabs(v) < 1e-6:
+            self.state.velocity_x = 0
             return
 
         heading = self.state.yaw
@@ -407,12 +416,12 @@ class SimpleVehicle:
             omega = clamp(omega, -327.68 * math.pi / 180,
                           327.67 * math.pi / 180)
         heading = math.fmod(heading + omega * dt, 2 * math.pi)
-        ds = math.fabs(self.state.velocity_x) * dt
+        ds = v * dt
         dx = ds * math.cos((self.state.yaw + heading) / 2)
         dy = ds * math.sin((self.state.yaw + heading) / 2)
         self.state.x += dx
         self.state.y += dy
-        self.state.s += ds
+        self.state.s += math.fabs(ds)
         self.state.yaw = heading
         self.state.angular_rate_yaw = omega
 
@@ -450,12 +459,15 @@ class SimpleVehicle:
     def on_update_sideway(self, dt):
         """on_update_sideway
         """
-        v = math.fabs(self.state.velocity_x)
-        v = clamp(v + self.state.acceleration_x * dt, 0.0, 20.47)
+        direction = 1.0
         if self.state.gear == 2:
-            self.state.velocity_x = -v
-        else:
-            self.state.velocity_x = v
+            direction = -1.0
+        v = clamp(self.state.velocity_x + self.state.acceleration_x * dt, 0.0,
+                  10.23 * direction)
+        self.state.velocity_x = v
+        if math.fabs(v) < 1e-6:
+            self.state.velocity_x = 0
+            return
         heading = self.state.yaw
         dx = self.state.velocity_x * math.cos(heading + math.pi / 2) * dt
         dy = self.state.velocity_x * math.sin(heading + math.pi / 2) * dt
@@ -467,12 +479,16 @@ class SimpleVehicle:
     def on_update_crabwalk(self, dt):
         """on_update_crabwalk
         """
-        v = math.fabs(self.state.velocity_x)
-        v = clamp(v + self.state.acceleration_x * dt, 0.0, 20.47)
+        direction = 1.0
         if self.state.gear == 2:
-            self.state.velocity_x = -v
-        else:
-            self.state.velocity_x = v
+            direction = -1.0
+        v = math.fabs(self.state.velocity_x)
+        v = clamp(self.state.velocity_x + self.state.acceleration_x * dt, 0.0,
+                  10.23 * direction)
+        self.state.velocity_x = v
+        if math.fabs(v) < 1e-6:
+            self.state.velocity_x = 0
+            return
         heading = self.state.yaw
         angular = math.fmod(heading + self.state.steering * math.pi / 180,
                             math.pi * 2)

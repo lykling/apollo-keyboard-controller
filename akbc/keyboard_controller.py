@@ -154,15 +154,23 @@ class KeyboardController:
         """handle_input
         """
         if key == curses.KEY_UP:
-            if self.controls['acceleration'] >= 0:
-                self.controls['acceleration'] += 0.1
+            gear = self.controls['gear_location']
+            direction = 1.0
+            if gear == 2:
+                direction = -1.0
+            if self.controls['acceleration'] * direction >= 0:
+                self.controls['acceleration'] += 0.1 * direction
             else:
                 self.controls['acceleration'] = 0
             self.log(f'accelerated to {self.controls["acceleration"]} m/s^2')
 
         elif key == curses.KEY_DOWN:
-            if self.controls['acceleration'] <= 0:
-                self.controls['acceleration'] -= 0.1
+            gear = self.controls['gear_location']
+            direction = 1.0
+            if gear == 2:
+                direction = -1.0
+            if self.controls['acceleration'] * direction <= 0:
+                self.controls['acceleration'] -= 0.1 * direction
             else:
                 self.controls['acceleration'] = 0
             self.log(f'braked to {self.controls["acceleration"]} m/s^2')
@@ -192,6 +200,7 @@ class KeyboardController:
             motions = [1, 2, 3, 4, 5]
             self.motion_mode_idx = (self.motion_mode_idx + 1) % len(motions)
             self.controls['motion_mode'] = motions[self.motion_mode_idx]
+            self.controls['acceleration'] = 0.0
             self.log(f'set motion_mode to {self.controls["motion_mode"]}.')
 
         elif key == ord('s'):
@@ -207,6 +216,7 @@ class KeyboardController:
             gears = [0, 1, 2, 3]
             self.gear_location_idx = (self.gear_location_idx + 1) % len(gears)
             self.controls['gear_location'] = gears[self.gear_location_idx]
+            self.controls['acceleration'] = 0.0
             self.log(f'set gear_location to {self.controls["gear_location"]}.')
 
     def on_chassis(self, chassis):
